@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  redis-stack:
+    container_name: redis-stack
+    image: redis/redis-stack-server:6.2.6-v4
+    ports:
+      - target: 6379
+        published: 6379
+        mode: host
+      - target: 8001
+        published: 8001
+        mode: host
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    # use REDIS_ARGS for redis-stack-server instead of command arguments
+#    environment:
+#      - REDIS_ARGS=--save 1200 32
+#    volumes:
+#      - my-redis-data:/data
+
+  api:
+    # This starts GUnicorn without live-reload
+    command: /fastapi_redis_om/backend/start.sh
+    container_name: fastapi
+    image: fastapi
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - target: 8883
+        published: 8883
+        mode: host
+    depends_on:
+      - redis-stack
+    healthcheck:
+      # Note: The INFO: logs that may appear in the logs are from FastAPI, not curl
+      test: [ "CMD-SHELL",
+              "curl --fail --silent http://localhost:8883/docs || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      REDIS_OM_URL: "redis://redis-stack/0"
